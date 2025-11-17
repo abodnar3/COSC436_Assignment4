@@ -2,7 +2,6 @@
 <html lang="en">
 
 <!-- imports socket io & css -->
-
 <head>
     <link rel="stylesheet" href="./index.css">
     <link rel="stylesheet" href="./lobby.css">
@@ -72,6 +71,43 @@
         <button class="xo-choice" data-choice="O">O</button>
     </div>
 
+    <!-- GAME SECTION (hidden until PLAY event) -->
+    <div id="game-section" style="display:none; margin-top:40px;">
+        <h2>Game In Progress</h2>
+
+        <table id="game-info-table">
+            <thead>
+                <tr>
+                    <th>X Player</th>
+                    <th>O Player</th>
+                    <th>Turn</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td id="x-label">-</td>
+                    <td id="o-label">-</td>
+                    <td id="turn-label">-</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div id="game-board">
+            <div class="cell" data-cell="0"></div>
+            <div class="cell" data-cell="1"></div>
+            <div class="cell" data-cell="2"></div>
+
+            <div class="cell" data-cell="3"></div>
+            <div class="cell" data-cell="4"></div>
+            <div class="cell" data-cell="5"></div>
+
+            <div class="cell" data-cell="6"></div>
+            <div class="cell" data-cell="7"></div>
+            <div class="cell" data-cell="8"></div>
+        </div>
+    </div>
+
+
     <script>
         document.addEventListener("DOMContentLoaded", () => {
 
@@ -112,17 +148,17 @@
                 }
                 games.forEach((game, row_index) => {
                     const row = document.createElement("tr");
+                    const me = localStorage.getItem("screenname");
 
                     // X cell
                     const xCell = document.createElement("td");
                     if (game.x_player) {
                         xCell.textContent = game.x_player;
-                    } else {
+                    } else if (me !== game.o_player) {
                         const joinX = document.createElement("button");
                         joinX.textContent = "Join";
                         joinX.addEventListener("click", () => {
-                            const me = localStorage.getItem("screenname");
-                            socket.emit("join_game", {row_index, team: "X", player: me});
+                            socket.emit("join_game", { row_index, team: "X", player: me });
                         });
                         xCell.appendChild(joinX);
                     }
@@ -131,12 +167,11 @@
                     const oCell = document.createElement("td");
                     if (game.o_player) {
                         oCell.textContent = game.o_player;
-                    } else {
+                    } else if (me !== game.x_player) {
                         const joinO = document.createElement("button");
                         joinO.textContent = "Join";
                         joinO.addEventListener("click", () => {
-                            const me = localStorage.getItem("screenname");
-                            socket.emit("join_game", {row_index, team: "O", player: me});
+                            socket.emit("join_game", { row_index, team: "O", player: me });
                         });
                         oCell.appendChild(joinO);
                     }
@@ -145,8 +180,6 @@
                     row.appendChild(oCell);
                     activeGamesBody.appendChild(row);
                 });
-
-
             });
 
             // update idle players >> resets html table, displays 'no idle players' if the sql table is empty, and
@@ -162,6 +195,27 @@
                     row.innerHTML = `<td>${name}</td>`;
                     idlePlayersBody.appendChild(row);
                 });
+            });
+
+            socket.on("PLAY", ({ x_player, o_player }) => {
+                document.getElementById("game-section").style.display = "block";
+
+                document.getElementById("x-label").textContent = x_player;
+                document.getElementById("o-label").textContent = o_player;
+
+                document.getElementById("turn-label").textContent = `X: ${x_player}`;
+
+                const me = localStorage.getItem("screenname");
+                if (me === x_player || me === o_player) {
+                    document.getElementById("newGameBtn").style.display = "none";
+                }
+            })
+
+            const name = localStorage.getItem("screenname");
+
+            socket.on("connect", () => {
+                socket.emit("register", name);
+                console.log("Registered after entering lobby:", name, socket.id);
             });
 
             // new-game >> shows X/O prompt for user (which team to pick)
@@ -188,5 +242,4 @@
         });
     </script>
 </body>
-
 </html>

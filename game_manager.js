@@ -13,6 +13,8 @@ const io = new Server(http_server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
+const players = {};
+
 // gets player statuses asynchronously
 function getAllPlayerStatuses(callback) {
     // selects screenames from sql table logged_in
@@ -84,8 +86,12 @@ function updateList() {
 // socket connections
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
-
     updateList();
+
+    socket.on("register", (screenName) => {
+        players[screenName] = socket.id;
+        console.log("Registered", screenName, socket.id);
+    });
 
     // get lobby status >> updates the tables 
     socket.on("get_lobby_status", () => {
@@ -157,6 +163,12 @@ io.on('connection', (socket) => {
 
     // disconnect handlier
     socket.on('disconnect', () => {
+        for (const name in players) {
+            if (players[name] === socket.id) {
+                delete players[name];
+                break;
+            }
+        }
         console.log(`Client disconnected: ${socket.id}`);
         // refreshes all statuses when a client leaves
         updateList();
@@ -194,7 +206,7 @@ io.on('connection', (socket) => {
         })
     })
 
-    socket.on("join_game", ({ row_index, team, player }) => {
+    socket.on("join_game", ({row_index, team, player}) => {
         db_conn.query("SELECT x_player, o_player FROM players", (err, rows) => {
             if (err) {
                 console.error(err);
@@ -207,6 +219,7 @@ io.on('connection', (socket) => {
             }
 
             let query, params;
+
             if (team === "X" && !row.x_player) {
                 query = "UPDATE players SET x_player = ? WHERE x_player IS NULL AND o_player = ?";
                 params = [player, row.o_player];
@@ -223,6 +236,34 @@ io.on('connection', (socket) => {
                     console.error(err);
                     return;
                 }
+
+                db_conn.query("SELECT x_player, o_player FROM players", (err, updated) => {
+                    if (err) {
+                        return console.error(err);
+                    }
+
+                    const updated_row = updated[row_index];
+                    if (!updated_row) {
+                        return;
+                    }
+
+                    const x_player = updated_row.x_player;
+                    const o_player = updated_row.o_player;
+
+                    if (x_player && o_player) {
+                        const x_socket = players[x_player];
+                        const o_socket = players[o_player];
+
+                        if (x_socket) {
+                            io.to(x_socket).emit("PLAY", {x_player, o_player});
+                        }
+                        if (o_socket) {
+                            io.to(o_socket).emit("PLAY", {x_player, o_player});
+                        }
+
+                        console.log(`Starting game between ${x_player} and ${o_player}`);
+                    }
+                })
 
                 console.log(`${player} joined game row ${row_index} as ${team}`);
                 updateList();
