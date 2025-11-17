@@ -1,0 +1,69 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #fafafa;
+    text-align: center;
+}
+
+.lobby-container {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 30px;
+    margin-top: 30px;
+    flex-wrap: wrap;
+}
+
+.table-box {
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    width: 300px;
+    height: 300px;
+    overflow-y: auto;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th {
+    background-color: #007bff;
+    color: white;
+    position: sticky;
+    top: 0;
+}
+
+td,
+th {
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+}
+
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+h3 {
+    margin: 10px 0;
+}
+
+#newGameBtn {
+    margin-top: 25px;
+    padding: 10px 20px;
+    font-size: 16px;
+    border-radius: 8px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+#newGameBtn:hover {
+    background-color: #218838;
+}
+
+.howToPlay {
+    cursor: pointer;
+}
