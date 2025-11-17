@@ -2,7 +2,6 @@
 <html lang="en">
 
 <!-- imports socket io & css -->
-
 <head>
     <link rel="stylesheet" href="./index.css">
     <link rel="stylesheet" href="./lobby.css">
@@ -66,14 +65,58 @@
     <!-- new-game button -->
     <button id="newGameBtn">New Game</button>
 
-    <div id="xo-prompt" style="display: none; margin-top:20px">
-        <h3>Pick X or O</h3>
-        <button class="xo-choice" data-choice="X">X</button>
-        <button class="xo-choice" data-choice="O">O</button>
+    <!--game playing div -->
+    <div class="gamePlayDiv">
+        <div><!--info div-->
+            <table id="gameInfoTable">
+                <th>X:</th>
+                <th>O:</th>
+                <th>Turn:</th>
+                <tr>
+                    <!--defaults-->
+                    <td>No Player</td>
+                    <td>No Player</td>
+                    <td>N/A</td>
+                </tr>
+            </table>
+
+        </div>
+
+        <!--result of game space-->
+        <h1 id="gameResult"></h1>
+
+        <div><!--Playing space div-->
+
+        <table>
+            <tr>
+                <td id="00" onclick="makeMove('00')"></td>
+                <td id="01" onclick="makeMove('01')"></td>
+                <td id="02" onclick="makeMove('02')"></td>
+                
+            </tr>
+            <tr>
+                <td id="10" onclick="makeMove('10')"></td>
+                <td id="11" onclick="makeMove('11')"></td>
+                <td id="12" onclick="makeMove('12')"></td>
+                
+            </tr>
+            <tr>
+                <td id="20" onclick="makeMove('20')"></td>
+                <td id="21" onclick="makeMove('21')"></td>
+                <td id="22" onclick="makeMove('22')"></td>
+                
+            </tr>
+        </table>
+        </div>
     </div>
 
     <script>
         document.addEventListener("DOMContentLoaded", () => {
+
+            //---global variables used in making makeMove. update based off of game
+            let yourTurn = false;
+            let yourSymbol = 'X';
+            let screenName ="";
 
             // shows overlay
             function showOverlay(overlay) {
@@ -110,43 +153,11 @@
                     activeGamesBody.innerHTML = "<tr><td colspan='2'>No active games</td></tr>";
                     return;
                 }
-                games.forEach((game, row_index) => {
+                games.forEach(game => {
                     const row = document.createElement("tr");
-
-                    // X cell
-                    const xCell = document.createElement("td");
-                    if (game.x_player) {
-                        xCell.textContent = game.x_player;
-                    } else {
-                        const joinX = document.createElement("button");
-                        joinX.textContent = "Join";
-                        joinX.addEventListener("click", () => {
-                            const me = localStorage.getItem("screenname");
-                            socket.emit("join_game", {row_index, team: "X", player: me});
-                        });
-                        xCell.appendChild(joinX);
-                    }
-
-                    // O cell
-                    const oCell = document.createElement("td");
-                    if (game.o_player) {
-                        oCell.textContent = game.o_player;
-                    } else {
-                        const joinO = document.createElement("button");
-                        joinO.textContent = "Join";
-                        joinO.addEventListener("click", () => {
-                            const me = localStorage.getItem("screenname");
-                            socket.emit("join_game", {row_index, team: "O", player: me});
-                        });
-                        oCell.appendChild(joinO);
-                    }
-
-                    row.appendChild(xCell);
-                    row.appendChild(oCell);
+                    row.innerHTML = `<td>${game.x_player}</td><td>${game.o_player}</td>`;
                     activeGamesBody.appendChild(row);
                 });
-
-
             });
 
             // update idle players >> resets html table, displays 'no idle players' if the sql table is empty, and
@@ -164,27 +175,237 @@
                 });
             });
 
-            // new-game >> shows X/O prompt for user (which team to pick)
+            // new-game button functionality
             newGameBtn.addEventListener("click", () => {
-                newGameBtn.style.display = "none";
-                document.getElementById("xo-prompt").style.display = "block";
+                socket.emit("request_new_game");
+
             });
-
-            document.querySelectorAll(".xo-choice").forEach(btn => {
-                btn.addEventListener("click", () => {
-                    const choice = btn.dataset.choice;
-
-                    const screen_name = localStorage.getItem("screenname");
-
-                    document.getElementById("xo-prompt").style.display = "none";
-
-                    socket.emit("new_game", `NEW-GAME ${screen_name} ${choice}`);
-                })
-            })
-
 
             // broadcasts 'get lobby status' to the server
             socket.emit("get_lobby_status");
+
+            //onclick function for table data
+            function makeMove(cell){
+                if(yourTurn){
+                    this.innerHTML = yourSymbol;
+                    yourTurn = false;
+                    
+                    socket.emit("MOVE", screenName, cell)
+                }
+                else{
+                    alert("It is not you turn yet");
+                }
+
+            }
+
+            //response to end game
+            socket.on("END-GAME",(winner)=>{
+                document.getElementById("gameResult").innerHTML=winner+" has won the game";
+
+                //disable buttons
+                for(let i = 0; i<3; i++){
+                    for(let j = 0;j<3;j++){
+                        document.getElementById(i.toString()+j.toString()).style.pointerEvents = "none";
+                    }
+                }
+
+
+                document.getElementById("newGameBtn").style.display = "block";
+
+            })
+
+            //response from a move being made
+            socket.on("MOVE", (cell) =>{
+                if(yourSymbol=='X')
+                    document.getElementById(cell).innerHTML = 'O';
+                else
+                    document.getElementById(cell).innerHTML = 'X';
+
+                let checkResult = checkGame();
+                
+                if(checkResult == "X has won"){
+                     socket.emit("END-GAME",('X',screenName));
+                }
+                else if(checkResult == "O has won"){
+                     socket.emit("END-GAME",('O',screenName));
+
+                }
+                else {
+                    socket.emit("END-GAME",('D'));
+
+                }
+                
+
+                yourTurn = true;
+            })
+
+            //function to check the status of the board
+            function checkGame(){
+                
+                //check if x has won
+
+                //check rows
+                for(let i = 0; i < 3; i++){
+                    let line = true;
+                    for(let j = 0; j < 3; j++){
+                      if (document.getElementById(i.toString()+j.toString()).innerHTML == 'O'){
+                        line = false;
+                      }
+                    }
+                    if(line == true)
+                        return "X has won";
+                }
+
+                //check columns
+                for(let i = 0; i< 3; i++){
+                    let line = true;
+                    for(let j = 0; j < 3; j ++){
+                         if (document.getElementById(j.toString()+i.toString()).innerHTML == 'O'){
+                        line = false;
+                      }
+                    }
+                    if(line == true)
+                        return "X has won";
+                }
+
+                //check diagonals
+                let line = true;
+                for(let i = 0; i<3; i++){
+                    if (document.getElementById(i.toString()+i.toString()).innerHTML == 'O'){
+                        line = false;
+                      }
+                }
+                if(line == true)
+                    return "X has won";
+
+               line = true;
+               if(document.getElementById("02").innerHTML == 'O'){
+                line = false;
+               }
+               if(document.getElementById("11").innerHTML == 'O'){
+                line = false;
+               }
+               if(document.getElementById("20").innerHTML == 'O'){
+                line = false;
+               }
+               if(line == true){
+                    return "X has won";
+               }
+
+               //check if draw
+
+              //check rows
+              let draw = true;
+              let zero = 0;
+              for(let i = 0; i < 3; i++){
+                let currentSymbol = document.getElementById(i.toString()+zero.toString());
+                let possible = true;
+                for(let j = 1; j< 3; j++){
+                    if(currentSymbol != document.getElementById(i.toString()+j.toString())){
+                        possible = false;
+                    }
+                }
+                if(possible == true){
+                    draw = false;
+                }
+              } 
+
+              //check columns
+              for(let i = 0; i < 3; i++){
+                let currentSymbol = document.getElementById(zero.toString()+i.toString());
+                let possible = true;
+                for(let j = 1; j< 3; j++){
+                    if(currentSymbol != document.getElementById(j.toString()+i.toString())){
+                        possible = false;
+                    }
+                }
+                if(possible == true){
+                    draw = false;
+                }
+              } 
+
+              //check diagonals
+              let currentSymbol = document.getElementById(zero.toString()+zero.toString());
+              let possible = true;
+              for(let i = 0; i< 3; i++){
+                if(currentSymbol != document.getElementById(i.toString()+i.toString())){
+                        possible = false;
+                    }
+              }
+              if(possible == true){
+                    draw = false;
+              }
+
+               currentSymbol = document.getElementById("02");
+               possible = true;
+               if(document.getElementById("11").innerHTML != currentSymbol){
+                possible = false;
+               }
+               if(document.getElementById("20").innerHTML != currentSymbol){
+                possible = false;
+               }
+               if(possible == true){
+                    draw = false;
+               }
+
+               if(draw == true){
+                return "The game is a draw";
+               }
+
+               //check if O has won
+                //check rows
+                for(let i = 0; i < 3; i++){
+                    let line = true;
+                    for(let j = 0; j < 3; j++){
+                      if (document.getElementById(i.toString()+j.toString()).innerHTML == 'X'){
+                        line = false;
+                      }
+                    }
+                    if(line == true)
+                        return "O has won";
+                }
+
+                //check columns
+                for(let i = 0; i< 3; i++){
+                    let line = true;
+                    for(let j = 0; j < 3; j ++){
+                         if (document.getElementById(j.toString()+i.toString()).innerHTML == 'X'){
+                        line = false;
+                      }
+                    }
+                    if(line == true)
+                        return "O has won";
+                }
+
+                //check diagonals
+                line = true;
+                for(let i = 0; i<3; i++){
+                    if (document.getElementById(i.toString()+i.toString()).innerHTML == 'X'){
+                        line = false;
+                      }
+                }
+                if(line == true)
+                    return "O has won";
+
+               line = true;
+               if(document.getElementById("02").innerHTML == 'X'){
+                line = false;
+               }
+               if(document.getElementById("11").innerHTML == 'X'){
+                line = false;
+               }
+               if(document.getElementById("20").innerHTML == 'X'){
+                line = false;
+               }
+               if(line == true){
+                    return "O has won";
+               }
+
+               //game still in progress
+               return "Game is not finished";
+
+
+            }
         });
     </script>
 </body>
