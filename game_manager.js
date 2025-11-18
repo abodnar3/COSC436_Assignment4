@@ -3,7 +3,7 @@ const cors = require('cors');
 const app = require('express')();
 app.use(cors());
 const http_server = require('http').createServer(app);
-const {Server} = require('socket.io');
+const { Server } = require('socket.io');
 
 // includes connection to db
 const db_conn = require('./db_connect.js').dbCon;
@@ -13,9 +13,7 @@ const io = new Server(http_server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// variables for keeping track of clients
-let connectedClients = [];
-let sNames = []; //screen names
+const players = {};
 
 // gets player statuses asynchronously
 function getAllPlayerStatuses(callback) {
@@ -72,9 +70,10 @@ function updateList() {
             }
 
             // gets all active players
-            const activeGames = pairs.map(r => ({
-                x_player: r.x_player || "",
-                o_player: r.o_player || ""
+            const activeGames = pairs.map((r, index) => ({
+                row_index: index,
+                x_player: r.x_player || null,
+                o_player: r.o_player || null
             }));
 
             // sends messages to server via socket io
@@ -87,8 +86,12 @@ function updateList() {
 // socket connections
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
-
     updateList();
+
+    socket.on("register", (screenName) => {
+        players[screenName] = socket.id;
+        console.log("Registered", screenName, socket.id);
+    });
 
     // get lobby status >> updates the tables 
     socket.on("get_lobby_status", () => {
@@ -160,10 +163,120 @@ io.on('connection', (socket) => {
 
     // disconnect handlier
     socket.on('disconnect', () => {
+        for (const name in players) {
+            if (players[name] === socket.id) {
+                delete players[name];
+                break;
+            }
+        }
         console.log(`Client disconnected: ${socket.id}`);
         // refreshes all statuses when a client leaves
         updateList();
     });
+
+    socket.on('new_game', (msg) => {
+        const parts = msg.trim().split(" ");
+
+        if (parts.length !== 3) {
+            console.log("Incorrect NEW-GAME msg");
+            return;
+        }
+
+        const screenName = parts[1];
+        const team = parts[2];
+
+        let query;
+
+        if (team === 'X') {
+            query = "INSERT INTO players (x_player, o_player) VALUES (?, NULL)";
+        }
+        else {
+            query = "INSERT INTO players (x_player, o_player) VALUES (NULL, ?)";
+        }
+
+        db_conn.query(query, [screenName], (err, result) => {
+            if (err) {
+                console.log("DB error during NEW-GAME:", err);
+                return;
+            }
+
+            console.log(`${screenName} started a new game as ${team}`);
+
+            updateList();
+        })
+    })
+
+    socket.on("join_game", ({row_index, team, player}) => {
+        db_conn.query("SELECT x_player, o_player FROM players", (err, rows) => {
+            if (err) {
+                console.error(err);
+                return;
+            }
+
+            const row = rows[row_index];
+            if (!row) {
+                return;
+            }
+
+            let query, params;
+
+            if (team === "X" && !row.x_player) {
+                query = "UPDATE players SET x_player = ? WHERE x_player IS NULL AND o_player = ?";
+                params = [player, row.o_player];
+            } else if (team === "O" && !row.o_player) {
+                query = "UPDATE players SET o_player = ? WHERE x_player = ? AND o_player IS NULL";
+                params = [player, row.x_player];
+            } else {
+                socket.emit("join_error", "Team already filled.");
+                return;
+            }
+
+            db_conn.query(query, params, (err) => {
+                if (err) {
+                    console.error(err);
+                    return;
+                }
+
+                db_conn.query("SELECT x_player, o_player FROM players", (err, updated) => {
+                    if (err) {
+                        return console.error(err);
+                    }
+
+                    const updated_row = updated[row_index];
+                    if (!updated_row) {
+                        return;
+                    }
+
+                    const x_player = updated_row.x_player;
+                    const o_player = updated_row.o_player;
+
+                    //----added to recieve for game playing on server side
+                io.to(players[x_player]).emit("your_symbol",'X')
+                io.to(players[o_player]).emit("your_symbol",'O')
+
+                    if (x_player && o_player) {
+                        const x_socket = players[x_player];
+                        const o_socket = players[o_player];
+
+                        if (x_socket) {
+                            io.to(x_socket).emit("PLAY", {x_player, o_player});
+                        }
+                        if (o_socket) {
+                            io.to(o_socket).emit("PLAY", {x_player, o_player});
+                        }
+
+                        console.log(`Starting game between ${x_player} and ${o_player}`);
+                    }
+                })
+
+                
+
+                console.log(`${player} joined game row ${row_index} as ${team}`);
+                updateList();
+                socket.emit("join_success", {row_index});
+            })
+        })
+    })
 
     // developer db reset for testing (will be removed later) >> resets all db tables
     socket.on("developer_reset", () => {
@@ -186,7 +299,6 @@ io.on('connection', (socket) => {
         // updates all clients after clearing tables
         setTimeout(updateList, 100);
     });
-
     //move made handler
     socket.on("MOVE", (screenName, cell) =>{
          db_conn.query("SELECT x_player, o_player FROM players WHERE x_player = ? OR o_player = ?",[screenName,screenName],(err, result) => {
@@ -198,11 +310,11 @@ io.on('connection', (socket) => {
             if(result.length > 0){
                 const value = result[0];
 
-                if (value.x_player == screenName){// --- stuck here, need to send the move to the other client socket but dont know how to get their socket id
-
+                if (value.x_player == screenName){
+                   io.to(players[value.o_player]).emit("MOVE",(cell))
                 }
                 else{
-
+                   io.to(players[value.x_player]).emit("MOVE",(cell))
                 }
             }
 
@@ -213,44 +325,60 @@ io.on('connection', (socket) => {
 
     //end game handlers
     socket.on("END-GAME", (winner, screenName)=>{
-        // db_conn.query("SELECT x_player, o_player FROM players WHERE x_player = ? OR o_player = ?",[screenName,screenName],(err, result) => {
-        //  if (err) {
-        //         console.log("DB error:", err);
-        //         socket.emit("end_error", "Database error.");
-        //         return;
-        //     }
-        //     screen1 = result.x_player;
-        //     screen2 = result.o_player;
 
+        //console.log('Querying for:', screenName);
+           db_conn.query("SELECT x_player, o_player FROM players WHERE x_player = ? OR o_player = ?",[screenName,screenName], (err,result)=>{
+            //console.log("Query result:", result);
+            if (err) {
+                console.log("DB error:", err);
+                socket.emit("end_error", "Database error.");
+                return;
+            }
+            
+            if(result.length > 0){
+                const value = result[0];
 
-            db_conn.query("DELETE FROM players WHERE x_player = ? OR o_player = ?", [screenName,screenName],(err2,result2) =>{
-              if (err2) {
+                socket.emit("END-GAME", (winner));
+                //console.log("test 4 passed");
+
+                if (value.x_player == screenName){
+                   io.to(players[value.o_player]).emit("END-GAME",(winner))
+                }
+                else{
+                   io.to(players[value.x_player]).emit("END-GAME",(winner))
+                }
+            }
+          
+       
+               //db_conn.query("UPDATE players SET x_player = ?, o_player = ? WHERE x_player = ? OR o_player = ?", [null,null,screenName,screenName],(err2,result2) =>{
+                db_conn.query("DELETE FROM players  WHERE x_player = ? OR o_player = ?", [screenName,screenName],(err2,result2) =>{
+                if (err2) {
                 console.log("DB error:", err2);
                 socket.emit("end_error", "Database error.");
                 return;
             }
 
-            updateList()
+            //console.log("end game test");
+               updateList()
 
-            socket.emit("END-GAME", (winner))
-            //----------need to emit to adjacent client
+               
+            
+           
             
 
-          //})
+          })
         
         })
         
 
     })
-    socket.on("END-GAME",(draw)=>{
-
-    })
+    
 
 
 });
 
 // periodically updates all clients' tables every second
-setInterval(() => {updateList();}, 1000);
+setInterval(() => { updateList(); }, 1000);
 
 // starts the server on port 8080
 const PORT = 8080;
