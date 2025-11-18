@@ -212,6 +212,14 @@
             });
 
             socket.on("PLAY", ({ x_player, o_player }) => {
+                 //----set on click functions
+            for(let i = 0; i<3; i++){
+                for(let j = 0; j<3; j++){
+                 document.getElementById(i.toString()+j.toString()).style.pointerEvents = "auto";
+                document.getElementById(i.toString()+j.toString()).innerHTML = "";
+                }
+            }
+
                 document.getElementById("game-section").style.display = "block";
 
                 document.getElementById("x-label").textContent = x_player;
