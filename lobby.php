@@ -65,58 +65,65 @@
     <!-- new-game button -->
     <button id="newGameBtn">New Game</button>
 
-    <!--game playing div -->
-    <div class="gamePlayDiv">
-        <div><!--info div-->
-            <table id="gameInfoTable">
-                <th>X:</th>
-                <th>O:</th>
-                <th>Turn:</th>
-                <tr>
-                    <!--defaults-->
-                    <td>No Player</td>
-                    <td>No Player</td>
-                    <td>N/A</td>
-                </tr>
-            </table>
+    <div id="xo-prompt" style="display: none; margin-top:20px">
+        <h3>Pick X or O</h3>
+        <button class="xo-choice" data-choice="X">X</button>
+        <button class="xo-choice" data-choice="O">O</button>
+    </div>
 
-        </div>
+    <!-- GAME SECTION (hidden until PLAY event) -->
+    <div id="game-section" style="display:none; margin-top:40px;">
+        <h2>Game In Progress</h2>
 
         <!--result of game space-->
-        <h1 id="gameResult"></h1>
+        <h2 id="gameResult"></h2>
 
-        <div><!--Playing space div-->
-
-        <table>
-            <tr>
-                <td id="00" onclick="makeMove('00')"></td>
-                <td id="01" onclick="makeMove('01')"></td>
-                <td id="02" onclick="makeMove('02')"></td>
-                
-            </tr>
-            <tr>
-                <td id="10" onclick="makeMove('10')"></td>
-                <td id="11" onclick="makeMove('11')"></td>
-                <td id="12" onclick="makeMove('12')"></td>
-                
-            </tr>
-            <tr>
-                <td id="20" onclick="makeMove('20')"></td>
-                <td id="21" onclick="makeMove('21')"></td>
-                <td id="22" onclick="makeMove('22')"></td>
-                
-            </tr>
+        <table id="game-info-table">
+            <thead>
+                <tr>
+                    <th>X Player</th>
+                    <th>O Player</th>
+                    <th>Turn</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td id="x-label">-</td>
+                    <td id="o-label">-</td>
+                    <td id="turn-label">-</td>
+                </tr>
+            </tbody>
         </table>
+
+        <div id="game-board">
+            <div class="cell" data-cell="0" id ="00" ></div>
+            <div class="cell" data-cell="1" id="01" ></div>
+            <div class="cell" data-cell="2" id="02" ></div>
+
+            <div class="cell" data-cell="3" id="10" ></div>
+            <div class="cell" data-cell="4" id="11" ></div>
+            <div class="cell" data-cell="5" id="12" ></div>
+
+            <div class="cell" data-cell="6" id="20" ></div>
+            <div class="cell" data-cell="7" id="21" ></div>
+            <div class="cell" data-cell="8" id="22" ></div>
         </div>
     </div>
 
+
     <script>
         document.addEventListener("DOMContentLoaded", () => {
-
             //---global variables used in making makeMove. update based off of game
             let yourTurn = false;
             let yourSymbol = 'X';
             let screenName ="";
+
+            //----set on click functions
+            for(let i = 0; i<3; i++){
+                for(let j = 0; j<3; j++){
+                document.getElementById(i.toString()+j.toString()).onclick = function(){makeMove(i.toString()+j.toString());};
+                }
+            }
 
             // shows overlay
             function showOverlay(overlay) {
@@ -138,7 +145,7 @@
             howToPlay_closeBtn.addEventListener('click', () => { hideOverlay(howToPlay_overlay); });
 
             // connects socket to server
-            const socket = io("http://localhost:8080");
+            const socket = io("http://13.59.135.142:8080");
 
             // references html
             const activeGamesBody = document.getElementById("activeGamesBody");
@@ -153,9 +160,38 @@
                     activeGamesBody.innerHTML = "<tr><td colspan='2'>No active games</td></tr>";
                     return;
                 }
-                games.forEach(game => {
+                games.forEach((game, row_index) => {
                     const row = document.createElement("tr");
-                    row.innerHTML = `<td>${game.x_player}</td><td>${game.o_player}</td>`;
+                    const me = localStorage.getItem("screenname");
+
+                    // X cell
+                    const xCell = document.createElement("td");
+                    if (game.x_player) {
+                        xCell.textContent = game.x_player;
+                    } else if (me !== game.o_player) {
+                        const joinX = document.createElement("button");
+                        joinX.textContent = "Join";
+                        joinX.addEventListener("click", () => {
+                            socket.emit("join_game", { row_index, team: "X", player: me });
+                        });
+                        xCell.appendChild(joinX);
+                    }
+
+                    // O cell
+                    const oCell = document.createElement("td");
+                    if (game.o_player) {
+                        oCell.textContent = game.o_player;
+                    } else if (me !== game.x_player) {
+                        const joinO = document.createElement("button");
+                        joinO.textContent = "Join";
+                        joinO.addEventListener("click", () => {
+                            socket.emit("join_game", { row_index, team: "O", player: me });
+                        });
+                        oCell.appendChild(joinO);
+                    }
+
+                    row.appendChild(xCell);
+                    row.appendChild(oCell);
                     activeGamesBody.appendChild(row);
                 });
             });
@@ -175,32 +211,76 @@
                 });
             });
 
-            // new-game button functionality
-            newGameBtn.addEventListener("click", () => {
-                socket.emit("request_new_game");
+            socket.on("PLAY", ({ x_player, o_player }) => {
+                document.getElementById("game-section").style.display = "block";
 
+                document.getElementById("x-label").textContent = x_player;
+                document.getElementById("o-label").textContent = o_player;
+
+                document.getElementById("turn-label").textContent = `X: ${x_player}`;
+
+                const me = localStorage.getItem("screenname");
+                if (me === x_player || me === o_player) {
+                    document.getElementById("newGameBtn").style.display = "none";
+                }
+            })
+
+            const name = localStorage.getItem("screenname");
+
+            socket.on("connect", () => {
+                socket.emit("register", name);
+                console.log("Registered after entering lobby:", name, socket.id);
             });
+
+            // new-game >> shows X/O prompt for user (which team to pick)
+            newGameBtn.addEventListener("click", () => {
+                newGameBtn.style.display = "none";
+                document.getElementById("xo-prompt").style.display = "block";
+            });
+
+            document.querySelectorAll(".xo-choice").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const choice = btn.dataset.choice;
+
+                    const screen_name = localStorage.getItem("screenname");
+
+                    document.getElementById("xo-prompt").style.display = "none";
+
+                    socket.emit("new_game", `NEW-GAME ${screen_name} ${choice}`);
+                })
+            })
+
 
             // broadcasts 'get lobby status' to the server
             socket.emit("get_lobby_status");
-
             //onclick function for table data
             function makeMove(cell){
                 if(yourTurn){
-                    this.innerHTML = yourSymbol;
+                    if(document.getElementById(cell).innerHTML != "X" && document.getElementById(cell).innerHTML != "O"){
+                    document.getElementById(cell).innerHTML = yourSymbol;
                     yourTurn = false;
                     
-                    socket.emit("MOVE", screenName, cell)
+                    socket.emit("MOVE", name, cell)
+                    }
+                    else{
+                        alert("This space is filled");
+                    }
                 }
                 else{
-                    alert("It is not you turn yet");
+                    alert("It is not your turn yet");
                 }
 
             }
 
             //response to end game
             socket.on("END-GAME",(winner)=>{
-                document.getElementById("gameResult").innerHTML=winner+" has won the game";
+                if(winner =='D'){
+                    document.getElementById("gameResult").innerHTML= "The game is a draw";
+
+                }
+                else{
+                document.getElementById("gameResult").innerHTML= winner+" has won the game";
+                }
 
                 //disable buttons
                 for(let i = 0; i<3; i++){
@@ -211,6 +291,7 @@
 
 
                 document.getElementById("newGameBtn").style.display = "block";
+                console.log("test passed");
 
             })
 
@@ -222,16 +303,17 @@
                     document.getElementById(cell).innerHTML = 'X';
 
                 let checkResult = checkGame();
+                console.log(checkResult);
                 
                 if(checkResult == "X has won"){
-                     socket.emit("END-GAME",('X',screenName));
+                     socket.emit("END-GAME",'X',name);
                 }
                 else if(checkResult == "O has won"){
-                     socket.emit("END-GAME",('O',screenName));
+                     socket.emit("END-GAME",'O',name);
 
                 }
-                else {
-                    socket.emit("END-GAME",('D'));
+                else if(checkResult == "The game is a draw"){
+                    socket.emit("END-GAME",'D',name);
 
                 }
                 
@@ -239,8 +321,17 @@
                 yourTurn = true;
             })
 
+            //---response to get symbol and turn
+            socket.on("your_symbol", (symbol)=>{
+                yourSymbol = symbol;
+                if(symbol == 'X'){
+                    yourTurn = true;
+                }
+            })
+
             //function to check the status of the board
             function checkGame(){
+                //console.log("in-test")
                 
                 //check if x has won
 
@@ -248,7 +339,7 @@
                 for(let i = 0; i < 3; i++){
                     let line = true;
                     for(let j = 0; j < 3; j++){
-                      if (document.getElementById(i.toString()+j.toString()).innerHTML == 'O'){
+                      if (document.getElementById(i.toString()+j.toString()).innerHTML == 'O' || document.getElementById(i.toString()+j.toString()).innerHTML == ''){
                         line = false;
                       }
                     }
@@ -260,7 +351,7 @@
                 for(let i = 0; i< 3; i++){
                     let line = true;
                     for(let j = 0; j < 3; j ++){
-                         if (document.getElementById(j.toString()+i.toString()).innerHTML == 'O'){
+                         if (document.getElementById(j.toString()+i.toString()).innerHTML == 'O' || document.getElementById(j.toString()+i.toString()).innerHTML == ''){
                         line = false;
                       }
                     }
@@ -271,7 +362,7 @@
                 //check diagonals
                 let line = true;
                 for(let i = 0; i<3; i++){
-                    if (document.getElementById(i.toString()+i.toString()).innerHTML == 'O'){
+                    if (document.getElementById(i.toString()+i.toString()).innerHTML == 'O' || document.getElementById(i.toString()+i.toString()).innerHTML == ''){
                         line = false;
                       }
                 }
@@ -279,13 +370,13 @@
                     return "X has won";
 
                line = true;
-               if(document.getElementById("02").innerHTML == 'O'){
+               if(document.getElementById("02").innerHTML == 'O' || document.getElementById("02").innerHTML == ''){
                 line = false;
                }
-               if(document.getElementById("11").innerHTML == 'O'){
+               if(document.getElementById("11").innerHTML == 'O' || document.getElementById("11").innerHTML == ''){
                 line = false;
                }
-               if(document.getElementById("20").innerHTML == 'O'){
+               if(document.getElementById("20").innerHTML == 'O' || document.getElementById("20").innerHTML == ''){
                 line = false;
                }
                if(line == true){
@@ -297,14 +388,30 @@
               //check rows
               let draw = true;
               let zero = 0;
+              
               for(let i = 0; i < 3; i++){
-                let currentSymbol = document.getElementById(i.toString()+zero.toString());
+                let currentSymbol = document.getElementById(i.toString()+zero.toString()).innerHTML;
                 let possible = true;
+                let skip = false;
+                if(currentSymbol == ''){
+
+                    second = document.getElementById(i.toString()+(1).toString()).innerHTML
+                    third = document.getElementById(i.toString()+(2).toString()).innerHTML
+                    if(second == '' || third == ''){
+                        skip = true;
+                    }
+                    else if(second == third){
+                        skip = true;
+                    }
+                }
+                if(skip == false){
                 for(let j = 1; j< 3; j++){
-                    if(currentSymbol != document.getElementById(i.toString()+j.toString())){
+                    if(document.getElementById(i.toString()+j.toString()) != '' && currentSymbol != document.getElementById(i.toString()+j.toString())){
                         possible = false;
                     }
                 }
+            }
+            
                 if(possible == true){
                     draw = false;
                 }
@@ -312,38 +419,81 @@
 
               //check columns
               for(let i = 0; i < 3; i++){
-                let currentSymbol = document.getElementById(zero.toString()+i.toString());
+                let currentSymbol = document.getElementById(zero.toString()+i.toString()).innerHTML;
                 let possible = true;
+                let skip = false;
+                if(currentSymbol == ''){
+
+                    second = document.getElementById(i.toString()+(1).toString()).innerHTML
+                    third = document.getElementById(i.toString()+(2).toString()).innerHTML
+                    if(second == '' || third == ''){
+                        skip = true;
+                    }
+                    else if(second == third){
+                        skip = true;
+                    }
+                }
+                if(skip == false){
                 for(let j = 1; j< 3; j++){
-                    if(currentSymbol != document.getElementById(j.toString()+i.toString())){
+                    if(document.getElementById(i.toString()+j.toString()) != '' &&currentSymbol != document.getElementById(j.toString()+i.toString())){
                         possible = false;
                     }
                 }
+            }
                 if(possible == true){
                     draw = false;
                 }
               } 
 
               //check diagonals
-              let currentSymbol = document.getElementById(zero.toString()+zero.toString());
+              let currentSymbol = document.getElementById(zero.toString()+zero.toString()).innerHTML;
               let possible = true;
+              let skip = false;
+                if(currentSymbol == ''){
+
+                    second = document.getElementById((1).toString()+(1).toString()).innerHTML
+                    third = document.getElementById((2).toString()+(2).toString()).innerHTML
+                    if(second == '' || third == ''){
+                        skip = true;
+                    }
+                    else if(second == third){
+                        skip = true;
+                    }
+                }
+                if(skip == false){
               for(let i = 0; i< 3; i++){
-                if(currentSymbol != document.getElementById(i.toString()+i.toString())){
+                if(document.getElementById(i.toString()+i.toString()) != '' && currentSymbol != document.getElementById(i.toString()+i.toString())){
                         possible = false;
                     }
               }
+            }
               if(possible == true){
                     draw = false;
               }
 
-               currentSymbol = document.getElementById("02");
+               currentSymbol = document.getElementById("02").innerHTML;
+               skip = false;
+                if(currentSymbol == ''){
+
+                    second = document.getElementById((1).toString()+(1).toString()).innerHTML
+                    third = document.getElementById((2).toString()+(0).toString()).innerHTML
+                    if(second == '' || third == ''){
+                        skip = true;
+                    }
+                    else if(second == third){
+                        skip = true;
+                    }
+                }
+                if(skip == false){
+               
                possible = true;
-               if(document.getElementById("11").innerHTML != currentSymbol){
+               if(document.getElementById("11") != '' && (document.getElementById("11").innerHTML != currentSymbol)){
                 possible = false;
                }
-               if(document.getElementById("20").innerHTML != currentSymbol){
+               if(document.getElementById("20") != '' &&(document.getElementById("20").innerHTML != currentSymbol)){
                 possible = false;
                }
+            }
                if(possible == true){
                     draw = false;
                }
@@ -357,7 +507,7 @@
                 for(let i = 0; i < 3; i++){
                     let line = true;
                     for(let j = 0; j < 3; j++){
-                      if (document.getElementById(i.toString()+j.toString()).innerHTML == 'X'){
+                      if (document.getElementById(i.toString()+j.toString()).innerHTML == 'X' || document.getElementById(i.toString()+j.toString()).innerHTML == ''){
                         line = false;
                       }
                     }
@@ -369,7 +519,7 @@
                 for(let i = 0; i< 3; i++){
                     let line = true;
                     for(let j = 0; j < 3; j ++){
-                         if (document.getElementById(j.toString()+i.toString()).innerHTML == 'X'){
+                         if (document.getElementById(j.toString()+i.toString()).innerHTML == 'X' || document.getElementById(j.toString()+i.toString()).innerHTML == ''){
                         line = false;
                       }
                     }
@@ -380,7 +530,7 @@
                 //check diagonals
                 line = true;
                 for(let i = 0; i<3; i++){
-                    if (document.getElementById(i.toString()+i.toString()).innerHTML == 'X'){
+                    if (document.getElementById(i.toString()+i.toString()).innerHTML == 'X' || document.getElementById(i.toString()+i.toString()).innerHTML == ''){
                         line = false;
                       }
                 }
@@ -388,13 +538,13 @@
                     return "O has won";
 
                line = true;
-               if(document.getElementById("02").innerHTML == 'X'){
+               if(document.getElementById("02").innerHTML == 'X' || document.getElementById("02").innerHTML == ''){
                 line = false;
                }
-               if(document.getElementById("11").innerHTML == 'X'){
+               if(document.getElementById("11").innerHTML == 'X' || document.getElementById("11").innerHTML == ''){
                 line = false;
                }
-               if(document.getElementById("20").innerHTML == 'X'){
+               if(document.getElementById("20").innerHTML == 'X' || document.getElementById("20").innerHTML == ''){
                 line = false;
                }
                if(line == true){
@@ -406,8 +556,8 @@
 
 
             }
+        
         });
     </script>
 </body>
-
 </html>
