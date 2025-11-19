@@ -334,7 +334,7 @@
                 else
                     document.getElementById(cell).innerHTML = 'X';
 
-                
+                 
                 
 
                 yourTurn = true;
@@ -443,8 +443,8 @@
                 let skip = false;
                 if(currentSymbol == ''){
 
-                    second = document.getElementById(i.toString()+(1).toString()).innerHTML
-                    third = document.getElementById(i.toString()+(2).toString()).innerHTML
+                    second = document.getElementById((1).toString()+i.toString()).innerHTML
+                    third = document.getElementById((2).toString()+i.toString()).innerHTML
                     if(second == '' || third == ''){
                         skip = true;
                     }
@@ -454,7 +454,7 @@
                 }
                 if(skip == false){
                 for(let j = 1; j< 3; j++){
-                    if(document.getElementById(i.toString()+j.toString()).innerHTML != '' &&currentSymbol != document.getElementById(j.toString()+i.toString()).innerHTML){
+                    if(document.getElementById(j.toString()+i.toString()).innerHTML != '' &&currentSymbol != document.getElementById(j.toString()+i.toString()).innerHTML){
                         possible = false;
                     }
                 }
