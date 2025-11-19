@@ -24,8 +24,17 @@
         <div>
             <button id="howToPlay-closeBtn" class="howToPlay">&times;</button>
             <h1>How to Play:</h1>
-            <p>
-                null
+            <p style="text-align:center;">
+                Welcome to the Tic-Tac-Toe Game!<br>
+                To play you first must enter a screen name that has not been taken.<br>
+                Once logged in you will see a list of games on the left. <br>
+                If there is an opening in the game, click join to enter the game.<br>
+                To create a new game, click the new game button and select X or O.<br>
+                Once a game has both players, the board will appear at the bottom of the screen<br>
+                The player playing as X will go first<br>
+                When it is your turn, click an empty space to place your tile.<br>
+                The first player with three of their tiles in a row will win.<br>
+                After the game has ended, you can create a new game or join another.
             </p>
         </div>
     </div>
@@ -267,6 +276,21 @@
                     if(document.getElementById(cell).innerHTML != "X" && document.getElementById(cell).innerHTML != "O"){
                     document.getElementById(cell).innerHTML = yourSymbol;
                     yourTurn = false;
+
+                    let checkResult = checkGame();
+                console.log(checkResult);
+                
+                if(checkResult == "X has won"){
+                     socket.emit("END-GAME",'X',name);
+                }
+                else if(checkResult == "O has won"){
+                     socket.emit("END-GAME",'O',name);
+
+                }
+                else if(checkResult == "The game is a draw"){
+                    socket.emit("END-GAME",'D',name);
+
+                }
                     
                     socket.emit("MOVE", name, cell)
                     }
@@ -310,20 +334,7 @@
                 else
                     document.getElementById(cell).innerHTML = 'X';
 
-                let checkResult = checkGame();
-                console.log(checkResult);
                 
-                if(checkResult == "X has won"){
-                     socket.emit("END-GAME",'X',name);
-                }
-                else if(checkResult == "O has won"){
-                     socket.emit("END-GAME",'O',name);
-
-                }
-                else if(checkResult == "The game is a draw"){
-                    socket.emit("END-GAME",'D',name);
-
-                }
                 
 
                 yourTurn = true;
@@ -414,7 +425,7 @@
                 }
                 if(skip == false){
                 for(let j = 1; j< 3; j++){
-                    if(document.getElementById(i.toString()+j.toString()) != '' && currentSymbol != document.getElementById(i.toString()+j.toString())){
+                    if(document.getElementById(i.toString()+j.toString()).innerHTML != '' && currentSymbol != document.getElementById(i.toString()+j.toString()).innerHTML){
                         possible = false;
                     }
                 }
@@ -443,7 +454,7 @@
                 }
                 if(skip == false){
                 for(let j = 1; j< 3; j++){
-                    if(document.getElementById(i.toString()+j.toString()) != '' &&currentSymbol != document.getElementById(j.toString()+i.toString())){
+                    if(document.getElementById(i.toString()+j.toString()).innerHTML != '' &&currentSymbol != document.getElementById(j.toString()+i.toString()).innerHTML){
                         possible = false;
                     }
                 }
@@ -470,7 +481,7 @@
                 }
                 if(skip == false){
               for(let i = 0; i< 3; i++){
-                if(document.getElementById(i.toString()+i.toString()) != '' && currentSymbol != document.getElementById(i.toString()+i.toString())){
+                if(document.getElementById(i.toString()+i.toString()).innerHTML != '' && currentSymbol != document.getElementById(i.toString()+i.toString()).innerHTML){
                         possible = false;
                     }
               }
@@ -480,6 +491,7 @@
               }
 
                currentSymbol = document.getElementById("02").innerHTML;
+               possible = true;
                skip = false;
                 if(currentSymbol == ''){
 
@@ -494,11 +506,11 @@
                 }
                 if(skip == false){
                
-               possible = true;
-               if(document.getElementById("11") != '' && (document.getElementById("11").innerHTML != currentSymbol)){
+              
+               if(document.getElementById("11").innerHTML != '' && (document.getElementById("11").innerHTML != currentSymbol)){
                 possible = false;
                }
-               if(document.getElementById("20") != '' &&(document.getElementById("20").innerHTML != currentSymbol)){
+               if(document.getElementById("20").innerHTML != '' &&(document.getElementById("20").innerHTML != currentSymbol)){
                 possible = false;
                }
             }
