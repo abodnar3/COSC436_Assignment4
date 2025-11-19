@@ -22,8 +22,17 @@
         <div>
             <button id="howToPlay-closeBtn" class="howToPlay">&times;</button>
             <h1>How to Play:</h1>
-            <p>
-                null
+            <p style="text-align:center;">
+                Welcome to the Tic-Tac-Toe Game!<br>
+                To play you first must enter a screen name that has not been taken.<br>
+                Once logged in you will see a list of games on the left. <br>
+                If there is an opening in the game, click join to enter the game.<br>
+                To create a new game, click the new game button and select X or O.<br>
+                Once a game has both players, the board will appear at the bottom of the screen<br>
+                The player playing as X will go first<br>
+                When it is your turn, click an empty space to place your tile.<br>
+                The first player with three of their tiles in a row will win.<br>
+                After the game has ended, you can create a new game or join another.
             </p>
         </div>
     </div>
@@ -61,7 +70,7 @@
             howToPlay_closeBtn.addEventListener('click', () => { hideOverlay(howToPlay_overlay); });
 
             // connects socket to server
-            const socket = io("http://localhost:8080");
+            const socket = io("http://13.59.135.142:8080");
 
             // ==> LOGIN FORM HANDLING
 

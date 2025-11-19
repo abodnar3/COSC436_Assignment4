@@ -13,6 +13,8 @@ const io = new Server(http_server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
+const players = {};
+
 // gets player statuses asynchronously
 function getAllPlayerStatuses(callback) {
     // selects screenames from sql table logged_in
@@ -84,8 +86,12 @@ function updateList() {
 // socket connections
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
-
     updateList();
+
+    socket.on("register", (screenName) => {
+        players[screenName] = socket.id;
+        console.log("Registered", screenName, socket.id);
+    });
 
     // get lobby status >> updates the tables 
     socket.on("get_lobby_status", () => {
@@ -157,6 +163,12 @@ io.on('connection', (socket) => {
 
     // disconnect handlier
     socket.on('disconnect', () => {
+        for (const name in players) {
+            if (players[name] === socket.id) {
+                delete players[name];
+                break;
+            }
+        }
         console.log(`Client disconnected: ${socket.id}`);
         // refreshes all statuses when a client leaves
         updateList();
@@ -194,7 +206,7 @@ io.on('connection', (socket) => {
         })
     })
 
-    socket.on("join_game", ({ row_index, team, player }) => {
+    socket.on("join_game", ({row_index, team, player}) => {
         db_conn.query("SELECT x_player, o_player FROM players", (err, rows) => {
             if (err) {
                 console.error(err);
@@ -207,6 +219,7 @@ io.on('connection', (socket) => {
             }
 
             let query, params;
+
             if (team === "X" && !row.x_player) {
                 query = "UPDATE players SET x_player = ? WHERE x_player IS NULL AND o_player = ?";
                 params = [player, row.o_player];
@@ -223,6 +236,40 @@ io.on('connection', (socket) => {
                     console.error(err);
                     return;
                 }
+
+                db_conn.query("SELECT x_player, o_player FROM players", (err, updated) => {
+                    if (err) {
+                        return console.error(err);
+                    }
+
+                    const updated_row = updated[row_index];
+                    if (!updated_row) {
+                        return;
+                    }
+
+                    const x_player = updated_row.x_player;
+                    const o_player = updated_row.o_player;
+
+                    //----added to recieve for game playing on server side
+                io.to(players[x_player]).emit("your_symbol",'X')
+                io.to(players[o_player]).emit("your_symbol",'O')
+
+                    if (x_player && o_player) {
+                        const x_socket = players[x_player];
+                        const o_socket = players[o_player];
+
+                        if (x_socket) {
+                            io.to(x_socket).emit("PLAY", {x_player, o_player});
+                        }
+                        if (o_socket) {
+                            io.to(o_socket).emit("PLAY", {x_player, o_player});
+                        }
+
+                        console.log(`Starting game between ${x_player} and ${o_player}`);
+                    }
+                })
+
+                
 
                 console.log(`${player} joined game row ${row_index} as ${team}`);
                 updateList();
@@ -252,6 +299,82 @@ io.on('connection', (socket) => {
         // updates all clients after clearing tables
         setTimeout(updateList, 100);
     });
+    //move made handler
+    socket.on("MOVE", (screenName, cell) =>{
+         db_conn.query("SELECT x_player, o_player FROM players WHERE x_player = ? OR o_player = ?",[screenName,screenName],(err, result) => {
+            if (err) {
+                console.log("DB error:", err);
+                socket.emit("move_error", "Database error.");
+                return;
+            }
+            if(result.length > 0){
+                const value = result[0];
+
+                if (value.x_player == screenName){
+                   io.to(players[value.o_player]).emit("MOVE",(cell))
+                }
+                else{
+                   io.to(players[value.x_player]).emit("MOVE",(cell))
+                }
+            }
+
+    
+        })
+
+    });
+
+    //end game handlers
+    socket.on("END-GAME", (winner, screenName)=>{
+
+        //console.log('Querying for:', screenName);
+           db_conn.query("SELECT x_player, o_player FROM players WHERE x_player = ? OR o_player = ?",[screenName,screenName], (err,result)=>{
+            //console.log("Query result:", result);
+            if (err) {
+                console.log("DB error:", err);
+                socket.emit("end_error", "Database error.");
+                return;
+            }
+            
+            if(result.length > 0){
+                const value = result[0];
+
+                socket.emit("END-GAME", (winner));
+                //console.log("test 4 passed");
+
+                if (value.x_player == screenName){
+                   io.to(players[value.o_player]).emit("END-GAME",(winner))
+                }
+                else{
+                   io.to(players[value.x_player]).emit("END-GAME",(winner))
+                }
+            }
+          
+       
+               //db_conn.query("UPDATE players SET x_player = ?, o_player = ? WHERE x_player = ? OR o_player = ?", [null,null,screenName,screenName],(err2,result2) =>{
+                db_conn.query("DELETE FROM players  WHERE x_player = ? OR o_player = ?", [screenName,screenName],(err2,result2) =>{
+                if (err2) {
+                console.log("DB error:", err2);
+                socket.emit("end_error", "Database error.");
+                return;
+            }
+
+            //console.log("end game test");
+               updateList()
+
+               
+            
+           
+            
+
+          })
+        
+        })
+        
+
+    })
+    
+
+
 });
 
 // periodically updates all clients' tables every second
@@ -260,4 +383,3 @@ setInterval(() => { updateList(); }, 1000);
 // starts the server on port 8080
 const PORT = 8080;
 http_server.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
-
